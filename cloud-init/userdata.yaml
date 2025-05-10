@@ -1,0 +1,529 @@
+#cloud-config
+
+timezone: America/Toronto
+ntp:
+  enabled: true
+  ntp_client: ntp
+  servers:
+    - 0.pool.utoronto.ca
+    - 1.pool.utoronto.ca
+    - 2.pool.utoronto.ca
+
+users:
+  - name: root
+    passwd: <SETUP_PASSWD_WITH_MKPASSWD>
+    ssh_authorized_keys:
+      - ssh-rsa ...<SETUP_SSH_KEY>
+  - name: vss-admin
+    gecos: VSS Admin
+    sudo: ALL=(ALL) ALL
+    groups: users, admin
+    lock_passwd: false
+    shell: /bin/bash
+    passwd: <SETUP_PASSWORD_WITH_MKPASSWD>
+    ssh_authorized_keys:
+      - ssh-rsa ...<SETUP_SSH_KEY>
+packages:
+  - open-vm-tools
+  - perl
+  - ntp
+  - sshpass
+  - python3
+  - python3-pip
+  - python3-venv
+  - ubuntu-advantage-pro
+  - ubuntu-advantage-tools
+  - nginx
+  - libnginx-mod-http-fancyindex
+  - openssl
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+power_state:
+  delay: now
+  mode: reboot
+  message: Rebooting the OS
+  condition: if [ -e /var/run/reboot-required ]; then exit 0; else exit 1; fi
+final_message: "The system is finally up, after $UPTIME seconds"
+write_files:
+- path: /etc/bash.bashrc
+  append: true
+  content: |
+    # vim:ts=4:sw=4
+    export HISTTIMEFORMAT="%F %T "
+    export HISTFILESIZE=1000
+    export HISTSIZE=1000
+
+    PROMPT_COMMAND=$(history -a)
+    typeset -r PROMPT_COMMAND
+
+    trap 'logger -p local1.notice -t bash -i -- "$USER":"$BASH_COMMAND"' DEBUG
+- path: /etc/update-motd.d/10-motd-vss
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    INSTANCE_ID=`vmware-rpctool "info-get guestinfo.ut.vss.instance.id"`
+    INSTANCE_NAME=`vmware-rpctool "info-get guestinfo.ut.vss.instance.name"`
+    printf "\n"
+    printf "  University of Toronto ITS Private Cloud Instance\n"
+    printf "\n"
+    printf "  Name:     $INSTANCE_NAME\n"
+    printf "  ID:       $INSTANCE_ID\n"
+- path: /etc/nologin
+  permissions: '644'
+  owner: root
+  content: |
+    #Disable login until system is ready
+- path: /etc/sysctl.d/60-disable-ipv6.conf
+  permissions: '644'
+  owner: root
+  content: |
+    net.ipv6.conf.all.disable_ipv6=1
+    net.ipv6.conf.default.disable_ipv6=1
+- path: /etc/ssh/sshd_config.d/50-ut-eis-vss.conf
+  owner: root
+  content: |
+    Port 2226
+    PermitRootLogin without-password
+    PasswordAuthentication yes
+    PubkeyAuthentication yes
+    X11Forwarding no
+    UseDNS no
+- path: /etc/sysctl.d/60-disable-ipv6.conf
+  owner: root
+  content: |
+    net.ipv6.conf.all.disable_ipv6=1
+    net.ipv6.conf.default.disable_ipv6=1
+- path: /var/www/vss-ubuntu-usg/index.html
+  append: true
+  content: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Secure by Design: Hardening Ubuntu VMs in the ITS Private Cloud</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body {
+          background: #f5f7fa;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          margin: 0;
+          padding: 0;
+          color: #222;
+        }
+        .container {
+          max-width: 700px;
+          margin: 40px auto 40px auto;
+          background: #fff;
+          border-radius: 12px;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+          padding: 32px 28px 28px 28px;
+        }
+        h1 {
+          text-align: center;
+          color: #1a237e;
+          font-size: 2.1em;
+          margin-bottom: 0.5em;
+        }
+        .subtitle {
+          text-align: center;
+          color: #607d8b;
+          font-size: 1.1em;
+          margin-bottom: 1.5em;
+        }
+        .img-center {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 1.5em;
+        }
+        .img-center img {
+          max-width: 100%;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .team {
+          text-align: center;
+          margin-bottom: 1.5em;
+        }
+        .team a {
+          color: #1976d2;
+          text-decoration: none;
+          font-weight: 500;
+        }
+        .team a:hover {
+          text-decoration: underline;
+        }
+        .motto {
+          text-align: center;
+          font-weight: bold;
+          color: #388e3c;
+          margin-bottom: 0.5em;
+        }
+        .thanks {
+          text-align: center;
+          font-style: italic;
+          color: #757575;
+          margin-bottom: 2em;
+        }
+        .tutorial {
+          margin-top: 2em;
+        }
+        .step {
+          background: #e3eafc;
+          border-left: 5px solid #1976d2;
+          border-radius: 6px;
+          margin-bottom: 1.2em;
+          padding: 1.1em 1.2em 1.1em 1.5em;
+          box-shadow: 0 1px 4px rgba(26,39,126,0.04);
+          display: flex;
+          align-items: flex-start;
+          gap: 1em;
+        }
+        .step-number {
+          background: #1976d2;
+          color: #fff;
+          font-weight: bold;
+          border-radius: 50%;
+          width: 2em;
+          height: 2em;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.1em;
+          flex-shrink: 0;
+          margin-top: 0.2em;
+        }
+        .step-content {
+          flex: 1;
+        }
+        .command {
+          display: block;
+          background: #23272f;
+          color: #fff;
+          font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+          font-size: 1em;
+          padding: 0.5em 0.8em;
+          border-radius: 5px;
+          margin: 0.7em 0 0.2em 0;
+          word-break: break-all;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.07);
+        }
+        .note {
+          background: #fff3cd;
+          color: #856404;
+          border-left: 4px solid #ffe082;
+          border-radius: 4px;
+          padding: 0.7em 1em;
+          margin: 1.2em 0 1.2em 0;
+          font-size: 0.98em;
+        }
+        @media (max-width: 600px) {
+          .container {
+            padding: 12px 4vw 18px 4vw;
+          }
+          h1 {
+            font-size: 1.3em;
+          }
+          .step {
+            flex-direction: column;
+            gap: 0.5em;
+            padding: 0.8em 0.7em 0.8em 1em;
+          }
+          .step-number {
+            width: 1.5em;
+            height: 1.5em;
+            font-size: 1em;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Secure by Design: Hardening Ubuntu Virtual Machines in the ITS Private Cloud</h1>
+        <div class="subtitle">
+          A step-by-step guide to auditing and hardening your <strong>Ubuntu 22.04 LTS Server</strong> with USG and <strong>CIS Level 1</strong> benchmarks.
+        </div>
+        <div class="img-center">
+          <img src="https://utor.cloud/img/dc/JBOD.png" alt="DataCenter"/>
+        </div>
+        <div class="team">
+          This site was co-developed with <a href="https://utor.cloud/y" target="_blank" rel="noopener">EISgpt assistant</a>.  You can check it out <a href="https://utor.cloud/y" target="_blank" rel="noopener">here</a>.
+        </div>
+        <div class="motto">DEFY GRAVITY</div>
+        <div class="thanks">Thank you for coming and enjoy!</div>
+
+        <div class="tutorial">
+          <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <strong>Access the server remotely via SSH.</strong>
+              <span class="command">ssh vss-admin@IP -p 2226</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <strong>Use <code>sudo</code> to elevate your permissions as administrator:</strong>
+              <span class="command">sudo su</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <strong>Verify that Ubuntu Pro is running:</strong>
+              <span class="command">pro status</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <strong>Login as root and proceed to enable USG:</strong>
+              <span class="command">pro enable usg</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+              <strong>Install the USG packages:</strong>
+              <span class="command">apt install usg</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">6</div>
+            <div class="step-content">
+              <strong>Audit your server to a CIS Level 1 (optionally try Level 2):</strong>
+              <span class="command">usg audit cis_level1_server</span>
+              <div style="font-size:0.97em; color:#607d8b; margin-top:0.2em;">(This process takes about 6 minutes)</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">7</div>
+            <div class="step-content">
+              <strong>Go to https://IP_ADDRESS/audit/ to see the list of results.</strong>
+              <div style="font-size:0.97em; color:#607d8b; margin-top:0.2em;">From the list, select a file to see the results.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">8</div>
+            <div class="step-content">
+              <strong>Run a CIS Level 1 tailor fix <span style="color:#d32f2f;">*</span>:</strong>
+              <span class="command">usg fix cis_level1_server</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">9</div>
+            <div class="step-content">
+              <strong>Proceed to reboot the server once you finish:</strong>
+              <span class="command">shutdown -r now</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">10</div>
+            <div class="step-content">
+              <strong>Once the server is back, audit your server to a CIS Level 1 as admin:</strong>
+              <span class="command">usg audit cis_level1_server</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">11</div>
+            <div class="step-content">
+              <strong>Take a look at the results and compare them with the previous audit results.</strong>
+            </div>
+          </div>
+          <div class="note">
+            <strong>Note:</strong> <br>
+            <span style="color:#d32f2f;">*</span> <b>We strongly recommend to <a href="https://eis-vss.atlassian.net/wiki/spaces/VSSPublic/pages/722796578/How-to+Create+Virtual+Machine+Snapshot">take a snapshot of the virtual machine</a> before running this step.</b>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+- path: /etc/nginx/sites-available/vss-ubuntu-usg
+  append: true
+  content: |
+    server {
+        listen 80;
+        server_name _;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        server_name _;
+
+        ssl_certificate /etc/ssl/certs/nginx-selfsigned.crt;
+        ssl_certificate_key /etc/ssl/private/nginx-selfsigned.key;
+        root /var/www/vss-ubuntu-usg;
+
+        location / {
+          try_files $uri $uri/ /index.html;
+        }
+
+        location /audit/ {
+          alias /var/www/reports/;
+          charset utf-8;
+          fancyindex on;
+          fancyindex_localtime on;
+          fancyindex_exact_size off;
+          fancyindex_header "/fancyindex_theme/header.html";
+          fancyindex_ignore "/fancyindex_theme";
+          autoindex off;
+        }
+
+        location /fancyindex_theme {
+          alias /var/www/fancyindex_theme;
+          try_files $uri $uri/ =404;
+        }
+    }
+- path: /etc/ubuntu-advantage/uaclient.conf
+  permissions: '644'
+  owner: root
+  content: |
+    contract_url: https://vss-ubuntu-pro.eis.utoronto.ca
+    log_level: debug
+- path: /usr/local/bin/refresh-audit-directory-permissions.sh
+  permissions: '755'
+  owner: root
+  content: |
+    #!/bin/bash
+    # This script sets permission to 755 to directory /var/lib/usg every 3 seconds.
+    while true; do
+      chmod 755 -R /var/lib/usg
+      echo "Running job at $(date)"
+      sleep 3
+    done
+- path: /etc/systemd/system/refresh-audit-directory-permissions.service
+  permissions: '644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Script to change permissions in background for /var/lib/usg/
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/local/bin/refresh-audit-directory-permissions.sh
+
+    [Install]
+    WantedBy=multi-user.target
+- path: /var/lib/usg/readme.txt
+  permissions: '755'
+  owner: root
+  content: |
+    This directory contains all the audit files.  You can click on each of the files to see the results.
+- path: /root/ci_src/100-enable_vss_ubuntu_pro.sh
+  permissions: '755'
+  owner: root
+  content: |
+    echo ===== $0 `date` =====
+    #Attach to Ubuntu Pro subscription (required for hardening)
+    snap install canonical-livepatch
+    canonical-livepatch config remote-server="`vmware-rpctool "info-get guestinfo.ut.vss.ubuntu_pro.livepatch.endpoint"`"
+    canonical-livepatch enable `vmware-rpctool "info-get guestinfo.ut.vss.ubuntu_pro.livepatch.token"`
+    pro attach `vmware-rpctool "info-get guestinfo.ut.vss.ubuntu_pro.token"`
+- path: /root/ci_src/230-enable-firewall.sh
+  permissions: '755'
+  owner: root
+  content: |+
+    echo ===== $0 `date` =====
+    # allow HTTP(s)
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+
+    # allow SSH access
+    ufw allow 2226/tcp
+- path: /root/ci_src/240-configure-nginx.sh
+  permissions: '755'
+  owner: root
+  content: |+
+    echo ===== $0 `date` =====
+    # Generate SSL Certificate
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048   -keyout /etc/ssl/private/nginx-selfsigned.key   -out /etc/ssl/certs/nginx-selfsigned.crt   -subj "/C=CA/ST=Ontario/L=Toronto/O=University of Toronto/OU=VSS/CN=http:\/\/${ip_address}/emailAddress=orlando.ramirezmartinez@utoronto.ca"
+    # Remove default Link
+    unlink /etc/nginx/sites-enabled/default
+    # Create a symlink of the new configuration.
+    ln -s /etc/nginx/sites-available/vss-ubuntu-usg /etc/nginx/sites-enabled/vss-ubuntu-usg
+    # Create a symlink of the reports directory
+    ln -s /var/lib/usg /var/www/reports
+    # Download FancyIndex template.
+    git clone https://github.com/artyuum/Nginx-FancyIndex-Theme.git /var/www/fancyindex_theme
+    # Set permissions to directory /var/www/fancyindex_theme
+    chmod 755 -R /var/www/fancyindex_theme
+    # Start Nginx
+    systemctl enable --now nginx
+- path: /root/ci_src/250-update-audit-link.sh
+  permissions: '755'
+  owner: root
+  content: |+
+    echo ===== $0 `date` =====
+    # Path to your HTML file
+    HTML_FILE="/var/www/vss-ubuntu-usg/index.html"
+    TMP_FILE="/var/www/vss-ubuntu-usg/tmpfile.html"
+    # Get the primary IP address (first non-loopback)
+    IP_=$(hostname -I | awk '{print $1}')
+    # Replace the placeholder with a clickable link
+    sed "s/https:\/\/IP_ADDRESS\/audit\//\<a href=\"https:\/\/$IP_\/audit\/\">https:\/\/$IP_\/audit\/\<\/a>/g" $HTML_FILE > $TMP_FILE
+    # Overwrite the original file
+    mv $TMP_FILE $HTML_FILE
+    # Replace IP ADDRESS string 
+    sed "s/IP/$IP_/g" $HTML_FILE > $TMP_FILE
+    # Overwrite the original file
+    mv $TMP_FILE $HTML_FILE
+    chmod 644 $HTML_FILE
+- path: /root/ci_src/260-enable-audit-directory-permissions.sh
+  permissions: '755'
+  owner: root
+  content: |+
+    echo ===== $0 `date` =====
+    sudo systemctl daemon-reload
+    sudo systemctl enable refresh-audit-directory-permissions.service 
+    sudo systemctl start refresh-audit-directory-permissions.service 
+- path: /root/ci_src/9999-complete.sh
+  permissions: '755'
+  owner: root
+  content: |
+    echo ===== $0 `date` =====
+    #Cleanup and Log when setup was completed
+    # rm -rf /root/ci_src
+    echo `date` CloudInit setup completed | tee /root/cloudinit.completed
+    sed -i "/^CloudInit setup/d" /etc/issue
+    # Enable SSH only after setup is completed...If SSH is not available, something broke!
+    ufw allow ssh
+    #Re-enable user logins
+    rm /etc/nologin
+    #Reboot after all installations completed
+    touch /var/run/reboot-required
+- path: /root/ci_src/000-initialconfig.sh
+  permissions: '755'
+  owner: root
+  content: |
+    echo ===== $0 `date` =====
+    #Enable firewall and deny SSH access until setup complete
+    sed -i "/^CloudInit setup/d" /etc/issue
+    echo CloudInit setup in progress - Host setup scripts. System will reboot when ready. >> /etc/issue
+    ufw default deny
+    ufw enable
+
+    #Enable data journal for root volume
+    if grep -q 'rootflags' /etc/default/grub; then
+        echo Already enabled
+    else
+        sed -i 's/GRUB_CMDLINE_LINUX="/GRUB_CMDLINE_LINUX="rootflags=data=journal /g' /etc/default/grub && update-grub
+    fi
+
+    chmod -x /etc/update-motd.d/50-motd-news
+    chmod -x /etc/update-motd.d/10-help-text
+
+    touch /etc/cloud/cloud-init.disabled
+
+    chmod 600 /etc/netplan/* #fix netplan permissions 
+runcmd:
+  - /root/ci_src/000-initialconfig.sh 2>&1 >> /root/cloudinit-setup.log
+  - /root/ci_src/100-enable_vss_ubuntu_pro.sh 2>&1 >> /root/cloudinit-setup.log
+  - /root/ci_src/230-enable-firewall.sh 2>&1 >> /root/cloudinit-setup.log
+  - /root/ci_src/240-configure-nginx.sh 2>&1 >> /root/cloudinit-setup.log
+  - /root/ci_src/250-update-audit-link.sh 2>&1 >> /root/cloudinit-setup.log
+  - /root/ci_src/260-enable-audit-directory-permissions.sh 2>&1 >> /root/cloudinit-setup.log
+  - /root/ci_src/9999-complete.sh 2>&1 >> /root/cloudinit-setup.log
+
+hostname: vss-ubuntu22-usg
+fqdn: vss-ubuntu22-usg.eis.utoronto.ca
